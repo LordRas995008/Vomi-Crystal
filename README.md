@@ -19,6 +19,16 @@ The creator is under 18 and has repeatedly hit Base44 usage limits while buildin
 - **Usage:** per-user request/token counters through the data adapter
 - **External app API:** `/api/v1/*` endpoints with bearer/API-key authentication
 
+## Crystal AI page control
+
+The dashboard includes a page-aware Crystal copilot. The AI can request a deliberately small set of UI actions (switch views/themes, focus mode, highlight/open an integration, or navigate to a known section). The server validates every requested action against an allowlist before the browser executes it.
+
+The model **cannot** send arbitrary JavaScript, manipulate arbitrary DOM selectors, read secrets, or trigger external side effects through this protocol. This keeps "control the page" useful without turning model output into executable code.
+
+## Visual system
+
+The main workspace uses a responsive Apple/Base44-inspired interface: warm neutral surfaces, glass panels, soft depth, blue-violet-pink crystal gradients, animated dimensional accents, light/dark themes, and a collapsible AI copilot.
+
 ## Implementation status
 
 This is intended to be a working application rather than a static mock. The code includes a real dashboard, server API routes, authentication hooks, usage accounting, AI provider calls, multipart storage uploads, and an external API contract.
