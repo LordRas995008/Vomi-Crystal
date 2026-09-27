@@ -33,6 +33,7 @@ export default function Home() {
   const [highlight, setHighlight] = useState<string | null>(null)
   const [health, setHealth] = useState<Health>({})
   const [assistantOpen, setAssistantOpen] = useState(true)
+  const [billingNotice, setBillingNotice] = useState('')
   const endRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -99,6 +100,18 @@ export default function Home() {
   const configuredCount = Object.values(health.configured || {}).filter(Boolean).length
   const activeService = services.find(s => s.id === selected)
 
+  async function choosePlan(plan: string) {
+    setBillingNotice('')
+    try {
+      const res = await fetch('/api/billing/checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan }) })
+      const data = await res.json()
+      if (data.url) { window.location.href = data.url; return }
+      setBillingNotice(data.message || data.error || 'Billing is not connected yet.')
+    } catch {
+      setBillingNotice('Billing is not connected yet. Your workspace is unchanged.')
+    }
+  }
+
   return (
     <main className={focus ? 'focus-mode' : ''}>
       <div className="aurora a1" /><div className="aurora a2" /><div className="noise" />
@@ -121,6 +134,7 @@ export default function Home() {
               ['overview', '⌂', 'Overview'],
               ['integrations', '◇', 'Integrations'],
               ['activity', '⌁', 'Activity'],
+              ['pricing', '♢', 'Plans'],
             ].map(([id, icon, label]) => (
               <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)}>
                 <span>{icon}</span>{label}
@@ -172,6 +186,17 @@ export default function Home() {
                 <span className="connection">{health.configured?.[service.id] ? 'Connected' : 'Configure'} →</span>
               </button>
             )}</div>
+          </div>}
+
+          {view === 'pricing' && <div className="panel-page">
+            <span className="kicker">PLANS & BILLING</span><h1>Grow when you need to.</h1><p className="page-lead">Start free. Upgrade when Crystal becomes part of your daily build workflow. Checkout activates only after Stripe is connected.</p>
+            <div className="pricing-grid">
+              <article className="price-card"><span className="plan-name">Free</span><h2>$0<small>/mo</small></h2><p>For exploring Crystal and connecting a small project.</p><ul><li>1 workspace</li><li>Core integrations</li><li>Crystal AI basics</li><li>Community support</li></ul><button onClick={() => setBillingNotice('You are already on the Free plan.')}>Current plan</button></article>
+              <article className="price-card featured"><span className="popular">MOST POPULAR</span><span className="plan-name">Crystal Plus</span><h2>$12<small>/mo</small></h2><p>For creators building and shipping real apps.</p><ul><li>Unlimited workspaces</li><li>Expanded AI usage</li><li>All integrations</li><li>Usage analytics</li><li>Priority workflows</li></ul><button className="gradient-btn" onClick={() => choosePlan('plus')}>Upgrade to Plus</button></article>
+              <article className="price-card"><span className="plan-name">Crystal Pro</span><h2>$29<small>/mo</small></h2><p>For heavier projects, teams and advanced infrastructure.</p><ul><li>Everything in Plus</li><li>Higher usage limits</li><li>Advanced API access</li><li>Team-ready controls</li><li>Priority support</li></ul><button onClick={() => choosePlan('pro')}>Choose Pro</button></article>
+            </div>
+            {billingNotice && <div className="billing-notice">{billingNotice}</div>}
+            <p className="billing-footnote">Prices are launch placeholders until you configure Stripe price IDs. No payment is collected by Crystal without Stripe configuration.</p>
           </div>}
 
           {view === 'activity' && <div className="panel-page">
