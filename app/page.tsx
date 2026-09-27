@@ -1,46 +1,223 @@
 'use client'
 
-import { useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 
-const features = [
-  ['AI', 'One server-side AI gateway for your app.'],
-  ['Files', 'Upload and store files without exposing storage keys.'],
-  ['Auth', 'Keep identity and access behind one backend boundary.'],
-  ['API', 'Give websites a clean Crystal endpoint to call.']
+type Message = { role: 'user' | 'assistant'; content: string }
+type CrystalAction = {
+  type: 'navigate' | 'set_theme' | 'set_view' | 'highlight' | 'open_service' | 'set_focus'
+  target?: string
+  value?: string
+}
+type Health = { ok?: boolean; configured?: Record<string, boolean> }
+
+const services = [
+  { id: 'ai', icon: '✦', name: 'AI Gateway', desc: 'One secure, provider-neutral AI endpoint.', tint: 'violet' },
+  { id: 'auth', icon: '⌁', name: 'Authentication', desc: 'Identity and access behind one boundary.', tint: 'blue' },
+  { id: 'files', icon: '◇', name: 'Files & Storage', desc: 'Upload and store without exposing keys.', tint: 'cyan' },
+  { id: 'api', icon: '↗', name: 'External API', desc: 'Clean endpoints for every Vomi app.', tint: 'pink' },
 ]
 
-export default function Home() {
-  const [prompt, setPrompt] = useState('')
-  const [answer, setAnswer] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [status, setStatus] = useState('Ready')
+const starterMessages: Message[] = [{
+  role: 'assistant',
+  content: 'Hey — I’m Crystal. I can explain this workspace and control its interface. Try “show integrations”, “switch to dark mode”, “open AI Gateway”, or ask me anything about your backend.'
+}]
 
-  async function ask() {
-    if (!prompt.trim()) return
-    setBusy(true); setStatus('Thinking…'); setAnswer('')
-    try {
-      const res = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Request failed')
-      setAnswer(data.output); setStatus(`Used ${data.usage?.total_tokens ?? 0} tokens`)
-    } catch (e) {
-      setAnswer(e instanceof Error ? e.message : 'Something went wrong'); setStatus('Needs configuration')
-    } finally { setBusy(false) }
+export default function Home() {
+  const [messages, setMessages] = useState<Message[]>(starterMessages)
+  const [prompt, setPrompt] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [view, setView] = useState('overview')
+  const [focus, setFocus] = useState(false)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [highlight, setHighlight] = useState<string | null>(null)
+  const [health, setHealth] = useState<Health>({})
+  const [assistantOpen, setAssistantOpen] = useState(true)
+  const endRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    fetch('/api/health').then(r => r.json()).then(setHealth).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+  }, [theme])
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages, busy])
+
+  function runAction(action: CrystalAction) {
+    const target = action.target || action.value || ''
+    if (action.type === 'set_theme' && (target === 'light' || target === 'dark')) setTheme(target)
+    if (action.type === 'set_view' && ['overview', 'integrations', 'activity'].includes(target)) setView(target)
+    if (action.type === 'set_focus') setFocus(target !== 'off')
+    if (action.type === 'open_service' && services.some(s => s.id === target)) {
+      setSelected(target); setView('integrations')
+    }
+    if (action.type === 'highlight' && services.some(s => s.id === target)) {
+      setHighlight(target); setView('integrations')
+      window.setTimeout(() => setHighlight(null), 2600)
+    }
+    if (action.type === 'navigate') {
+      const el = document.getElementById(target)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
   }
 
-  return <main>
-    <nav><div className="brand"><span className="crystal">✦</span> Vomi Crystal</div><span className="pill">Backend bridge</span></nav>
-    <section className="hero">
-      <div className="eyebrow">CONNECT YOUR APP · WITHOUT THE COMPLEXITY</div>
-      <h1>Your app.<br/><span>Connected.</span></h1>
-      <p>Crystal gives websites and apps one simple place for AI, authentication, files, storage, usage and APIs — with the complicated credentials kept on the server.</p>
-      <div className="actions"><a href="#workspace" className="primary">Open workspace</a><a href="#architecture" className="secondary">See how it works</a></div>
-    </section>
-    <section className="grid" id="architecture">{features.map(([title, text]) => <article key={title}><div className="icon">{title[0]}</div><h3>{title}</h3><p>{text}</p></article>)}</section>
-    <section className="workspace" id="workspace">
-      <div><div className="eyebrow">AI WORKSPACE</div><h2>Test your connection</h2><p className="muted">This calls Crystal's real server-side AI route. Add an OpenAI-compatible provider key in your deployment environment to activate it.</p></div>
-      <div className="console"><textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Ask Crystal something…" /><button disabled={busy || !prompt.trim()} onClick={ask}>{busy ? 'Working…' : 'Run AI'}</button>{answer && <div className="response"><small>{status}</small><p>{answer}</p></div>}</div>
-    </section>
-    <footer><span>Vomi Crystal</span><span>Server-side secrets · usage-aware · provider-neutral</span></footer>
-  </main>
+  async function ask(e?: FormEvent) {
+    e?.preventDefault()
+    const text = prompt.trim()
+    if (!text || busy) return
+    const next = [...messages, { role: 'user' as const, content: text }]
+    setMessages(next); setPrompt(''); setBusy(true)
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: text,
+          messages: next.slice(-10),
+          pageContext: { theme, view, focus, selected, services: services.map(s => s.id) },
+          control: true
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Crystal could not respond.')
+      setMessages(m => [...m, { role: 'assistant', content: data.output }])
+      if (Array.isArray(data.actions)) data.actions.slice(0, 4).forEach(runAction)
+    } catch (error) {
+      setMessages(m => [...m, {
+        role: 'assistant',
+        content: error instanceof Error ? error.message : 'Something went wrong. Check your AI connection.'
+      }])
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const configuredCount = Object.values(health.configured || {}).filter(Boolean).length
+  const activeService = services.find(s => s.id === selected)
+
+  return (
+    <main className={focus ? 'focus-mode' : ''}>
+      <div className="aurora a1" /><div className="aurora a2" /><div className="noise" />
+
+      <header className="topbar">
+        <button className="brand" onClick={() => setView('overview')} aria-label="Vomi Crystal home">
+          <span className="brand-gem">✦</span><span>Vomi Crystal</span>
+        </button>
+        <div className="top-actions">
+          <span className="status-chip"><i className={health.ok ? 'online' : ''} />{health.ok ? 'Systems ready' : 'Connecting'}</span>
+          <button className="icon-btn" onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} aria-label="Toggle theme">{theme === 'light' ? '☾' : '☀'}</button>
+          <button className="avatar">V</button>
+        </div>
+      </header>
+
+      <div className="shell">
+        <aside className="sidebar">
+          <nav className="side-nav">
+            {[
+              ['overview', '⌂', 'Overview'],
+              ['integrations', '◇', 'Integrations'],
+              ['activity', '⌁', 'Activity'],
+            ].map(([id, icon, label]) => (
+              <button key={id} className={view === id ? 'active' : ''} onClick={() => setView(id)}>
+                <span>{icon}</span>{label}
+              </button>
+            ))}
+          </nav>
+          <div className="side-bottom">
+            <button onClick={() => setFocus(v => !v)}><span>◎</span>{focus ? 'Exit focus' : 'Focus view'}</button>
+            <div className="mini-card">
+              <span className="mini-gem">✦</span>
+              <div><b>Crystal AI</b><small>Page control enabled</small></div>
+            </div>
+          </div>
+        </aside>
+
+        <section className="content" id="workspace">
+          {view === 'overview' && <>
+            <div className="welcome">
+              <div>
+                <span className="kicker">CRYSTAL CONTROL CENTER</span>
+                <h1>Good morning.<br/><em>Everything connects here.</em></h1>
+                <p>A calm control layer for AI, authentication, storage and APIs — designed to feel simple even when the backend isn’t.</p>
+              </div>
+              <div className="orb-wrap"><div className="orb"><span>✦</span></div></div>
+            </div>
+
+            <div className="metrics">
+              <article><span>Connected services</span><strong>{configuredCount}<small>/ 4</small></strong><div className="spark"><i/><i/><i/><i/><i/></div></article>
+              <article><span>Crystal status</span><strong className="healthy">{health.ok ? 'Healthy' : 'Checking'}</strong><small>Secure server boundary</small></article>
+              <article><span>AI assistant</span><strong>{health.configured?.ai ? 'Live' : 'Setup'}</strong><small>{health.configured?.ai ? 'Provider connected' : 'Add provider variables'}</small></article>
+            </div>
+
+            <div className="section-head"><div><span className="kicker">YOUR STACK</span><h2>Connected beautifully.</h2></div><button onClick={() => setView('integrations')}>Manage integrations <span>→</span></button></div>
+            <div className="service-grid">
+              {services.map(service => <button key={service.id} className={'service-card ' + service.tint + (highlight === service.id ? ' highlighted' : '')} onClick={() => setSelected(service.id)}>
+                <div className="service-icon">{service.icon}</div>
+                <div><h3>{service.name}</h3><p>{service.desc}</p></div>
+                <span className={'dot ' + (health.configured?.[service.id] ? 'on' : '')} />
+              </button>)}
+            </div>
+          </>}
+
+          {view === 'integrations' && <div className="panel-page">
+            <span className="kicker">INTEGRATIONS</span><h1>Build your stack.</h1><p className="page-lead">Crystal keeps credentials on the server and gives your apps one clean connection surface.</p>
+            <div className="integration-list">{services.map(service =>
+              <button key={service.id} className={'integration-row ' + (highlight === service.id ? 'highlighted' : '')} onClick={() => setSelected(service.id)}>
+                <span className={'service-icon ' + service.tint}>{service.icon}</span>
+                <span><b>{service.name}</b><small>{service.desc}</small></span>
+                <span className="connection">{health.configured?.[service.id] ? 'Connected' : 'Configure'} →</span>
+              </button>
+            )}</div>
+          </div>}
+
+          {view === 'activity' && <div className="panel-page">
+            <span className="kicker">ACTIVITY</span><h1>Quietly observable.</h1><p className="page-lead">A simple operational view of the Crystal boundary.</p>
+            <div className="activity-card">
+              <div className="activity-icon">✓</div><div><b>Health endpoint responding</b><small>Crystal API · just now</small></div><span>200 OK</span>
+            </div>
+            <div className="activity-card">
+              <div className="activity-icon">✦</div><div><b>AI gateway</b><small>Server-side provider</small></div><span>{health.configured?.ai ? 'Ready' : 'Needs setup'}</span>
+            </div>
+          </div>}
+        </section>
+
+        {!focus && <aside className={'assistant ' + (assistantOpen ? 'open' : 'closed')} id="assistant">
+          <div className="assistant-head">
+            <div><span className="ai-gem">✦</span><span><b>Crystal</b><small>AI copilot</small></span></div>
+            <button onClick={() => setAssistantOpen(v => !v)}>{assistantOpen ? '×' : '✦'}</button>
+          </div>
+          {assistantOpen && <>
+            <div className="messages">
+              {messages.map((m, i) => <div key={i} className={'message ' + m.role}>{m.role === 'assistant' && <span className="tiny-gem">✦</span>}<p>{m.content}</p></div>)}
+              {busy && <div className="message assistant"><span className="tiny-gem">✦</span><p className="typing"><i/><i/><i/></p></div>}
+              <div ref={endRef}/>
+            </div>
+            <div className="suggestions">
+              <button onClick={() => setPrompt('Show me the integrations')}>Show integrations</button>
+              <button onClick={() => setPrompt('Open the AI Gateway')}>Open AI Gateway</button>
+            </div>
+            <form className="composer" onSubmit={ask}>
+              <textarea value={prompt} onChange={e => setPrompt(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask() } }} placeholder="Ask Crystal or control this page…" rows={2}/>
+              <button disabled={busy || !prompt.trim()} aria-label="Send">↑</button>
+            </form>
+            <small className="control-note">✦ Crystal can control this page using approved UI actions.</small>
+          </>}
+        </aside>}
+      </div>
+
+      {activeService && <div className="modal-backdrop" onMouseDown={() => setSelected(null)}>
+        <div className="modal" onMouseDown={e => e.stopPropagation()}>
+          <button className="modal-close" onClick={() => setSelected(null)}>×</button>
+          <span className={'service-icon large ' + activeService.tint}>{activeService.icon}</span>
+          <span className="kicker">CRYSTAL INTEGRATION</span><h2>{activeService.name}</h2><p>{activeService.desc}</p>
+          <div className="config-box"><span>Status</span><b>{health.configured?.[activeService.id] ? '● Connected' : '○ Configuration required'}</b></div>
+          <button className="gradient-btn" onClick={() => { setSelected(null); setAssistantOpen(true); setPrompt('Help me configure ' + activeService.name) }}>Configure with Crystal</button>
+        </div>
+      </div>}
+    </main>
+  )
 }
