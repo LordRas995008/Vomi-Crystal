@@ -1,0 +1,19 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/api/health",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    { "name": "AI_BASE_URL", "description": "OpenAI-compatible provider base URL (e.g. https://api.openai.com/v1). Optional — AI features return 503 without it.", "requiredAtBoot": false },
+    { "name": "AI_API_KEY", "description": "API key for the AI provider. Optional — AI features return 503 without it.", "requiredAtBoot": false },
+    { "name": "AI_MODEL", "description": "Model name to use with the AI provider (e.g. gpt-4o). Optional.", "requiredAtBoot": false },
+    { "name": "BASE44_API_URL", "description": "Base44 API URL for server-side integration. Optional.", "requiredAtBoot": false },
+    { "name": "BASE44_APP_ID", "description": "Base44 app ID. Optional.", "requiredAtBoot": false },
+    { "name": "BASE44_API_KEY", "description": "Base44 API key for server-side calls. Optional.", "requiredAtBoot": false },
+    { "name": "STORAGE_ENDPOINT", "description": "S3-compatible storage endpoint URL. Optional — file uploads disabled without it.", "requiredAtBoot": false },
+    { "name": "STORAGE_BUCKET", "description": "S3-compatible storage bucket name. Optional.", "requiredAtBoot": false },
+    { "name": "STORAGE_ACCESS_KEY", "description": "S3-compatible storage access key. Optional.", "requiredAtBoot": false },
+    { "name": "STORAGE_SECRET_KEY", "description": "S3-compatible storage secret key. Optional.", "requiredAtBoot": false },
+    { "name": "TURNSTILE_SECRET_KEY", "description": "Cloudflare Turnstile secret key for verification. Optional.", "requiredAtBoot": false },
+    { "name": "CRYSTAL_API_KEY", "description": "Bearer token protecting /api/v1 and /api/ai routes. Optional — routes are open without it.", "requiredAtBoot": false }
+  ]
+}

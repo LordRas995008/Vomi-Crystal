@@ -2,6 +2,9 @@ import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  allowedDevOrigins: process.env.BASE44_PUBLIC_HOST_SUFFIX
+    ? ['3000-' + process.env.BASE44_PUBLIC_HOST_SUFFIX]
+    : [],
   async headers() {
     return [{ source: '/(.*)', headers: [
       { key: 'X-Content-Type-Options', value: 'nosniff' },
